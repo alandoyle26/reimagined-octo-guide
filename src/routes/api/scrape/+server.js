@@ -6,23 +6,61 @@ export const config = {
   maxDuration: 60
 };
 
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  let lastError;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      }).finally(() => clearTimeout(timeout));
+
+      // If we get a 520, wait and retry
+      if (response.status === 520) {
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        continue;
+      }
+
+      return response;
+    } catch (error) {
+      lastError = error;
+      // Only retry on network errors or timeouts
+      if (error.name === 'AbortError' || error.name === 'TypeError') {
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        continue;
+      }
+      throw error;
+    }
+  }
+  
+  throw lastError;
+}
+
 export async function GET() {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-
-    const response = await fetch('https://www.tesco.ie/groceries/en-IE/products/315848575', {
+    const response = await fetchWithRetry('https://www.tesco.ie/groceries/en-IE/products/315848575', {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'DNT': '1',
+        'Connection': 'keep-alive'
       },
-      signal: controller.signal,
-      cache: 'no-store'
-    }).finally(() => clearTimeout(timeout));
+      cache: 'no-store',
+      redirect: 'follow'
+    });
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -58,6 +96,7 @@ export async function GET() {
     console.error('Scraping error:', {
       message: error.message,
       name: error.name,
+      status: error.status,
       stack: error.stack
     });
 
@@ -74,6 +113,6 @@ export async function GET() {
       error: 'Failed to fetch data',
       message: error.message,
       details: error.name || 'Unknown error'
-    }, { status: 500 });
+    }, { status: error.status || 500 });
   }
 } 
