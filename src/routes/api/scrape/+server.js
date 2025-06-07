@@ -1,17 +1,10 @@
 import { json } from '@sveltejs/kit';
-import fetch from 'node-fetch';
+import { fetch } from 'undici';
 import * as cheerio from 'cheerio';
-import https from 'https';
 
 export async function GET() {
   try {
-    const agent = new https.Agent({
-      rejectUnauthorized: false,
-      keepAlive: true
-    });
-
-      const response = await fetch('https://www.tesco.ie/groceries/en-IE/products/315848575', {
-      agent,
+    const response = await fetch('https://www.tesco.ie/groceries/en-IE/products/315848575', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -24,6 +17,10 @@ export async function GET() {
         'Sec-Fetch-Site': 'none',
         'Sec-Fetch-User': '?1',
         'Cache-Control': 'max-age=0'
+      },
+      dispatcher: {
+        h2: true,
+        rejectUnauthorized: false
       }
     });
 
