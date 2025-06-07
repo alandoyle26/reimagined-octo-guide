@@ -2,6 +2,11 @@ import { json } from '@sveltejs/kit';
 import got from 'got';
 import * as cheerio from 'cheerio';
 
+export const config = {
+  runtime: 'edge',
+  maxDuration: 60
+};
+
 export async function GET() {
   try {
     const response = await got('https://www.tesco.ie/groceries/en-IE/products/315848575', {
@@ -14,17 +19,24 @@ export async function GET() {
         'Upgrade-Insecure-Requests': '1'
       },
       retry: {
-        limit: 5,
+        limit: 3,
         methods: ['GET'],
         statusCodes: [408, 413, 429, 500, 502, 503, 504],
         errorCodes: ['ETIMEDOUT', 'ECONNRESET', 'EADDRINUSE', 'ECONNREFUSED', 'EPIPE', 'ENOTFOUND', 'ENETUNREACH', 'EAI_AGAIN'],
         calculateDelay: ({ error, retryCount }) => {
+          if (error?.code === 'ETIMEDOUT') {
+            return Math.min(1000 * Math.pow(2, retryCount + 2), 20000);
+          }
           return Math.min(1000 * Math.pow(2, retryCount), 10000);
         }
       },
       timeout: {
-        request: 10000,
-        response: 10000
+        request: 30000,
+        response: 30000,
+        lookup: 3000,
+        connect: 5000,
+        secureConnect: 5000,
+        socket: 30000
       },
       decompress: true,
       followRedirect: true,
@@ -32,7 +44,10 @@ export async function GET() {
         rejectUnauthorized: false,
         checkServerIdentity: () => undefined
       },
-      http2: false
+      http2: false,
+      dnsCache: true,
+      keepAlive: true,
+      enableUnixSockets: false
     });
 
     if (!response.ok && response.statusCode !== 200) {
@@ -70,7 +85,7 @@ export async function GET() {
       message: error.message,
       code: error.code,
       statusCode: error.response?.statusCode,
-      body: error.response?.body?.slice(0, 200), // First 200 chars of response for debugging
+      body: error.response?.body?.slice(0, 200),
       stack: error.stack
     });
 
